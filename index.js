@@ -49,9 +49,9 @@ mongoose.connect("mongodb+srv://kavinda:12345@cluster0.rz4ayzy.mongodb.net/?retr
     }
 )
 
-app.use("/products" , productRouter)
-app.use("/users" , userRouter)
-app.use("/orders", orderRouter)
+app.use("/api/products" , productRouter)
+app.use("/api/users" , userRouter)
+app.use("/api/orders", orderRouter)
 
 app.listen(3000,
     ()=>{
