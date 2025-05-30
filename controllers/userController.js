@@ -53,7 +53,7 @@ export function loginUser(req,res){
         (user)=>{
             if(user == null){
                 res.status(404).json({
-                    massage : "User not found"
+                    message : "User not found"
                 })
             }else{
                 //check enter passsword and database password are matched
