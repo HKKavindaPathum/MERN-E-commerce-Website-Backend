@@ -7,86 +7,107 @@ import OTP from "../models/otp.js";
 import axios from 'axios';
 dotenv.config();
 
-export function createUser(req,res){
-
-    if(req.body.role == "admin"){
-        if(req.user != null){
-            if(req.user.role != "admin"){
-                res.status(403).json({
-                    message : "You are not authorized to create an admin accounts"
-                })
-                return
-            }
-        }else{
-            res.status(403).json({
-                message : "you are not authorized to create an admin accounts. please login first"
-            })
-            return   
-        }
+export function createAdmin(req, res) {
+    if (!req.user || req.user.role !== "admin") {
+        return res.status(403).json({
+            message: "Only admins can create another admin account"
+        })
     }
 
     const hashedPassword = bcrypt.hashSync(req.body.password, 10)
 
     const user = new User({
-        firstName : req.body.firstName,
-        lastName : req.body.lastName,
-        email : req.body.email,
-        password : hashedPassword,
-        role : req.body.role
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
+        email: req.body.email,
+        password: hashedPassword,
+        role: "admin" 
     })
 
-    user.save().then( 
-        ()=>{
-            res.json({
-                message : "User added successfully"
+    user.save()
+        .then(() => {
+            res.json({ message: "Admin account created successfully" })
+        })
+        .catch((err) => {
+            res.status(500).json({
+                message: "Failed to create admin account",
+                error: err.message
             })
-        }
-    ).catch( 
-        ()=>{
-            res.json({
-                message : "Fail to add User"
-            })
-        }
-    )
+        })
 }
 
-export function loginUser(req,res){
-    const email = req.body.email
-    const password = req.body.password
+export async function createUser(req, res) {
+    const { firstName, lastName, email, password } = req.body;
 
-    User.findOne({email : email}).then(
-        (user)=>{
-            if(user == null){
-                res.status(404).json({
-                    message : "User not found"
-                })
-            }else{
-                //check enter passsword and database password are matched
-                const isPasswordCorrect = bcrypt.compareSync(password, user.password)
-                if(isPasswordCorrect){
-                    const token = jwt.sign({
-                            email : user.email,
-                            firstName : user.firstName,
-                            lastName : user.lastName,
-                            role : user.role,
-                            img : user.img
-                        },
-                        process.env.JWT_KEY
-                    )
-                    res.json({
-                        message : "Login successful",
-                        token : token,
-                        role : user.role
-                    })
-                }else{
-                    res.status(401).json({
-                        message : "Invalid password"
-                    })
-                }
-            }
-        }
-    )
+    if (!firstName || !lastName || !email || !password) {
+        return res.status(400).json({ message: "All fields are required" });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        return res.status(400).json({ message: "Invalid email address" });
+    }
+
+    if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    const hashedPassword = bcrypt.hashSync(password, 10);
+
+    try {
+        const user = new User({
+            firstName,
+            lastName,
+            email,
+            password: hashedPassword,
+        });
+        await user.save();
+        res.json({ message: "Account created successfully" });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to create account", error: err.message });
+    }
 }
+
+
+
+export function loginUser(req, res) {
+  const email = req.body.email;
+  const password = req.body.password;
+
+  User.findOne({ email: email }).then((user) => {
+    if (user == null) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 🚨 Blocked user check
+    if (user.isBlocked) {
+      return res.status(403).json({ message: "Your account is blocked. Please contact admin." });
+    }
+
+    // check entered password and database password
+    const isPasswordCorrect = bcrypt.compareSync(password, user.password);
+    if (isPasswordCorrect) {
+      const token = jwt.sign(
+        {
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          img: user.img,
+        },
+        process.env.JWT_KEY
+      );
+      res.json({
+        message: "Login successful",
+        token: token,
+        role: user.role,
+      });
+    } else {
+      res.status(401).json({ message: "Invalid password" });
+    }
+  });
+}
+
 
 export async function loginWithGoogle(req,res){
     const token = req.body.accessToken;
@@ -282,4 +303,44 @@ export function isAdmin(req){
         return false
     }
     return true
+}
+
+export async function getAllUsers(req, res) {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({ message: "Unauthorized" });
+  }
+
+  const users = await User.find().select("-password");
+  res.json(users);
+}
+
+export async function blockUser(req, res) {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({ message: "Unauthorized" });
+  }
+
+  const userId = req.params.id;
+  const { isBlocked } = req.body;
+
+  await User.findByIdAndUpdate(userId, { isBlocked });
+  res.json({ message: `User ${isBlocked ? "blocked" : "unblocked"} successfully` });
+}
+
+export async function deleteUser(req, res) {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({ message: "Unauthorized" });
+  }
+
+  const userId = req.params.id;
+
+  try {
+    const deleted = await User.findByIdAndDelete(userId);
+    if (!deleted) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ message: "User deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete user", error });
+  }
 }
