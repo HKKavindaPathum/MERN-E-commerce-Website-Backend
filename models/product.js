@@ -36,9 +36,14 @@ const productSchema = mongoose.Schema({
         type : Boolean,
         required : true,
         default : true
+    },
+    category: {
+        type: String,
+        enum: ["skincare", "makeup", "haircare"],
+        required: true
     }
-})
+});
 
-const Product = mongoose.model("products", productSchema)
+const Product = mongoose.model("products", productSchema);
 
 export default Product;
